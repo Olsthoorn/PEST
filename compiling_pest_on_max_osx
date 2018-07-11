@@ -1,0 +1,281 @@
+============ COMPILING PEST on OSX (mac) ================================
+
+Compiling PEST on OSX (mac) from the source of the UNIX version downloaded from
+the PEST mainpage.
+
+######################################################################
+# PLATFORM  UNIX
+# COMPILER: GNU g95 FORTRAN95 compiler
+
+DEFINES= -DUNIX -DFLUSHFILE -DSLEEP
+F90=gfortran
+LD=gfortran
+#FFLAGS=-c -O0 -static
+FFLAGS=-c -O0 
+#LDFLAGS=-static
+LDFLAGS=
+######################################################################
+
+The compipilaton has been far from straightforward, due to some pecularities of `OSX`, which treats
+files with different case as identitcal. This makes implicit rules in the makef file that use
+
+`.F.f` or `.F90.f90` or `.C.c`
+
+to fail. The solution is, of course, to make sure that the file extensions are sufficiently different. Like `.FOR.f`
+or `._F90.f90` or `._C.c` .
+
+When we use not-standard suffixes in implicit rules we have to inform by `.SUFFIXES: .FOR ._F90` etc.
+
+Hence to get started we first rename all the `.f` files in the PEST source directory to `.FOR` files, like os in bash
+because there are many:
+
+`for “file” in “*.F”`
+	`mv “file” “{file%.F}.FOR”`
+`done`
+
+Then also rename the two `.C` files to `._C` files.
+
+And rename the seven `.F90` files to `._F90` files.
+
+The extensions `._F90` and `._C` do not matter, because these file are passed through
+the preprocessor, after which they have the usualextentions `.f`, `.f90` and `.c` for they are passed to the compiler.
+
+The implicit conversion rule will be adapted to match these file extensions.
+
+A second issue is that `OSX` does *not* support static libraries. There is a good reason for that, namely compatibility
+between different systems. But for us it means that we have to link to dynamic libraries. This is easily achieved
+by deleting the `-static` flag from both the `FFLAGS` and the `LDFLAGS`.
+
+There are a few othe issues, which are explained for each makefile below.
+
+And of course, like in John’s instructions, cppp has to be compiled first; it is used in all other makefiles.
+
+Theo Olsthoorn
+Heemstede, Netherlands
+2018-07-11
+tolsthoorn@gmail.com
+
+=================== pest.mak =======================
+
+`remove -static` from `FFLAGS` and `LDFLAGS`
+
+add suffix `.FOR` to suffixes, line 61 is a good place to put it
+
+`.SUFFIXES: .FOR`
+
+change the implicit rule for the `./cppp` prepocessor.
+
+`.FOR.f:
+	./cppp $(DEFINES) $< $@`
+
+Then compile by typing in the terminal:
+
+`make -f pest.mak all`
+
+A lot wiil work. The problem though is that `pestdata.mod `is written `pestdata.mod` in capitals like so
+`PESTDATA.mod`, while make, when executing the rule on line 442 produces the file `pestdata.mod` in lower case.
+This does not work with the linker. So change the lower case to uppercase on the disk
+
+`mv pestdata.mod pestdata._mod`
+`mv pestdata._mod PESTDATA.mod`
+
+On the mac, it must be done in two steps because `mv pestdata.mod PESTDATA.mod` does not work since `OSX` considers
+them the same, but it preserves the case when you naem the file explicitly.
+
+Finally, there’s some windows in the makefile that can be changed to `unix`:
+
+`calmaintain` on line 418 reads
+
+
+`calmaintain.exe:    calmaintain.o readpest.o lapack1.o lsqr_orig.o \
+                openun.o space.o compress.o pgetcl.o PESTDATA.mod
+        $(LD) $(LDFLAGS) calmaintain.o readpest.o lapack1.o lsqr_orig.o \
+                openun.o space.o compress.o pgetcl.o pestdata.o`
+
+This rule does not produce the `calmaintain.exe` because the command line option `-o calmaintain` is missing.
+
+So change it to this, while also removing the ugly Windows `.exe` extension:
+
+`calmaintain:    calmaintain.o readpest.o lapack1.o lsqr_orig.o \
+                openun.o space.o compress.o pgetcl.o PESTDATA.mod
+        $(LD) $(LDFLAGS) -o calimaintain calmaintain.o readpest.o lapack1.o lsqr_orig.o \
+                openun.o space.o compress.o pgetcl.o pestdata.o`
+
+Then compile
+
+`make -f pest.make all`
+
+and all works fine.
+
+================= ppest.mak, pestutl1.mak, pestutl3.mak pestutl4.mak=====================================
+
+First remove `-static` form the `FFLAGS` and the `LDFLAGS`.
+
+Change the implicit rule for the `./cppp` prepocessor.
+
+`.FOR.f:
+	./cppp $(DEFINES) $< $@`
+
+Add the required suffixes:
+
+`.SUFFIXES: .FOR .f`
+
+Then compile link
+
+`make -f ppest.mak all`
+
+================= pestutl2.mak ==================================
+
+Remove `-static` from the `FFLAGS` and the `LDFLAGS`
+
+Then compile and link:
+
+`make -f pestutl2.mak all`
+
+================ pestutl5.mak ==================================
+
+Remove `-static` from the `FFLAGS` and the `LDFLAGS`.
+
+Change the implicit rule for the `./cppp prepocessor`.
+
+`.FOR.f:
+	./cppp $(DEFINES) $< $@`
+
+Then, this makefile refers to several `.F90` files that have to converted to `.f90` by `./cppp` first.
+This does not work because OSX sees `.F90` and `.f90` as identical when looking for files.
+
+To remedy, change the extension of all seven `F90` files on disk to `._F90`, giving:
+
+`cmaes._F90 eqn._F90 mio._F90 obscalc._F90 parcalc._F90 prm._F90 random._F90`
+
+Then make a rule for this conversion to be done implicitlyby the preprocessor, like so
+
+`._F90.f90 :
+        ./cppp $(DEFINES) $< $@`
+
+Then add the required suffixes, all used suffixes (except perhaps .o) omust be specified for make to work.
+
+`.SUFFIXES: .FOR ._F90 .f .f90 .o`
+
+
+All other rules that invoke the preprocessor to convert `.F90` to `.f90` further down in the makfile
+can now be deleted as they are now covered by the `._F90.f90` rule.
+
+Then save and compile
+
+`make -f pestutl5.mak all`
+
+================ pestutl6.mak =============================================
+
+Like always remove `-static` from the `FFLAGS` and the `LDFLAGS`.
+
+And change the rule to now convert `.FOR` files to `.f` files implicitly by the preprocessor:
+
+`.FOR.f:
+	./cppp $(DEFINES) $< $@`
+
+The file `pestutl6.mak` proves to have ules that generate `.mod` files. Additionally, it has
+rules in which the `./cppp` preprocessor converts `.f` files into `.for` files. This is not so
+convenient, because we have renamed all pests `.f` files into `.FOR` files in the beginning.
+To do the same in this file as we did in all other makefiles, replace `.for` into `.f` every
+where in `pestutl6.mak`, so that the preprocessor will generate `.f` files.
+
+Then delete all rules where `.for` files are generated explicitly. We will replace all of
+them by a single implicit rule like so:
+
+`.FOR.f90:
+	./cppp $(DEFINES) $< $@`
+
+These two implicit rules do not bite each other because they are chosen based on both
+the suffix of the input file and of the output file, which together as a pair is unique.
+
+Then add the requried suffixes
+
+`.SUFFIXES: .FOR .f90 .f .mod .o`
+
+And generate the uitilities with 
+
+`make -f pestutl6.mak all`
+
+
+================= sensan.mak  ==================================================
+
+Remove the `-static` fromt he `FFLAGS` and the `LDFLAGS`
+
+add suffixes
+
+`.SUFFIXES: .FOR .f .o`
+
+Finally, change implicit `./cppp` rule to
+
+`.FOR.f:
+	./cppp $(DFINES) $< $@`
+
+and compile-link
+
+`make -f sensan.mak all`
+
+================= Beopest.mak ===================================
+
+Remove the `-static` flag from the `FFLAGS` and the `LDFLAGS` like before.
+
+Change the implicit rule for the `./cppp` prepocessor.
+
+`.FOR.f:
+	./cppp $(DEFINES) $< $@`
+
+Then we have to deal with the `.C` files, which also have to be preprocessed.
+For the same reason that `OSX` sees `.c` the same as `.C` we have to rename the `.C` files first
+
+`mv ip.c ip._C`
+`mv dsleep.c dsleep._C`
+
+Then put an implicit rule for them
+
+`._C.c:
+	./cppp $(DEFINES) $< $@`
+
+Don’t forget to add the requires suffixes, line 23 is a good place for this rule:
+
+`.SUFFIXES: .FOR ._C .f .c .o`
+
+Then upon compiling we have a problem with 
+
+`#include stdio.h`
+
+It’s missing, at least in the standard locations where `unix` normally searches for them.
+
+It must be on the `mac` somewhere, so search where it is like so in terminal:
+
+`find /Applications/Xcode.app -path '*/usr/include/stdio.h`
+
+The `stdio.h` turns out to be in a number of folders. Select the most general one, which is this
+
+`/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/stdio.h`
+
+The `sudo` command forbids making a symlink in `/usr` like so, even as a super user:
+`sudo ln -sf /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include /usr/include`
+
+Therefore, simply inform the preprocesser where it is. So,
+make a macro in the make file that defines this directory, like so
+
+`INCLUDE = /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include`
+
+Then include this macro with the `-I` option in the `._C.c` rule in the make file like so:
+
+`._C.c:
+       ./cppp $(DEFINES) -I $(INCLUDE) $< $@`
+
+This turns out to fail, probably because John’s cppp preprocessor can’t handle the long name of the included directory.
+As an alternative just use the system’s `cpp` preprocessor instead of John’s, like so:
+
+`._C.c:
+       cpp $(DEFINES) -I $(INCLUDE) $< $@`
+
+and all works fine when compiling and linking:
+
+`make -f beopest.mak all`
+
+====================== Theo Olsthoorn, Netherlands, 2018-07-11 =================
+
+
